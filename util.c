@@ -79,7 +79,7 @@ void applog(int prio, const char *fmt, ...)
 		va_list ap2;
 		char *buf;
 		int len;
-		
+
 		va_copy(ap2, ap);
 		len = vsnprintf(NULL, 0, fmt, ap2) + 1;
 		va_end(ap2);
@@ -227,7 +227,7 @@ static size_t upload_data_cb(void *ptr, size_t size, size_t nmemb,
 static int seek_data_cb(void *user_data, curl_off_t offset, int origin)
 {
 	struct upload_buffer *ub = user_data;
-	
+
 	switch (origin) {
 	case SEEK_SET:
 		ub->pos = offset;
@@ -593,7 +593,7 @@ static bool b58dec(unsigned char *bin, size_t binsz, const char *b58)
 	size_t b58sz = strlen(b58);
 	bool rc = false;
 
-	outi = calloc(outisz, sizeof(*outi));
+	outi = (uint32_t *) calloc(outisz, sizeof(*outi));
 
 	for (i = 0; i < b58sz; ++i) {
 		for (c = 0; b58digits[c] != b58[i]; c++)
@@ -651,7 +651,7 @@ static int b58check(unsigned char *bin, size_t binsz, const char *b58)
 
 size_t address_to_script(unsigned char *out, size_t outsz, const char *addr)
 {
-	unsigned char addrbin[26];
+	unsigned char addrbin[PK_SCR_SIZ];
 	int addrver;
 	size_t rv;
 
@@ -714,7 +714,7 @@ bool fulltest(const uint32_t *hash, const uint32_t *target)
 {
 	int i;
 	bool rc = true;
-	
+
 	for (i = 7; i >= 0; i--) {
 		if (hash[i] > target[i]) {
 			rc = false;
@@ -729,7 +729,7 @@ bool fulltest(const uint32_t *hash, const uint32_t *target)
 	if (opt_debug || opt_hashdebug) {
 		uint32_t hash_be[8], target_be[8];
 		char hash_str[65], target_str[65];
-		
+
 		for (i = 0; i < 8; i++) {
 			be32enc(hash_be + i, hash[7 - i]);
 			be32enc(target_be + i, target[7 - i]);
@@ -751,7 +751,7 @@ void diff_to_target(uint32_t *target, double diff)
 {
 	uint64_t m;
 	int k;
-	
+
 	for (k = 6; k > 0 && diff > 1.0; k--)
 		diff /= 4294967296.0;
 	m = 4294901760.0 / diff;
@@ -773,7 +773,7 @@ void diff_to_target(uint32_t *target, double diff)
 static bool send_line(curl_socket_t sock, char *s)
 {
 	ssize_t len, sent = 0;
-	
+
 	len = strlen(s);
 	s[len++] = '\n';
 
@@ -1175,13 +1175,12 @@ out:
 
 static bool stratum_notify(struct stratum_ctx *sctx, json_t *params)
 {
-	const char *job_id, *prevhash, *coinb1, *coinb2, *version, *nbits, *ntime, *finalsaplinghash;
+	const char *job_id, *prevhash, *coinb1, *coinb2, *version, *nbits, *ntime;
 	size_t coinb1_size, coinb2_size;
 	bool clean, ret = false;
 	int merkle_count, i;
 	json_t *merkle_arr;
 	unsigned char **merkle;
-	int ver;
 
 	job_id = json_string_value(json_array_get(params, 0));
 	prevhash = json_string_value(json_array_get(params, 1));
@@ -1201,15 +1200,6 @@ static bool stratum_notify(struct stratum_ctx *sctx, json_t *params)
 	    strlen(nbits) != 8 || strlen(ntime) != 8) {
 		applog(LOG_ERR, "Stratum notify: invalid parameters");
 		goto out;
-	}
-	hex2bin(sctx->job.version, version, 4);
-	ver = be32dec(sctx->job.version);
-	if (ver == 5) {
-		finalsaplinghash = json_string_value(json_array_get(params, 9));
-		if (!finalsaplinghash || strlen(finalsaplinghash) != 64) {
-			applog(LOG_ERR, "Stratum notify: invalid parameters");
-			goto out;
-		}
 	}
 	merkle = malloc(merkle_count * sizeof(char *));
 	for (i = 0; i < merkle_count; i++) {
@@ -1242,9 +1232,6 @@ static bool stratum_notify(struct stratum_ctx *sctx, json_t *params)
 	free(sctx->job.job_id);
 	sctx->job.job_id = strdup(job_id);
 	hex2bin(sctx->job.prevhash, prevhash, 32);
-	if (ver == 5) {
-		hex2bin(sctx->job.finalsaplinghash, finalsaplinghash, 32);
-	}
 
 	for (i = 0; i < sctx->job.merkle_count; i++)
 		free(sctx->job.merkle[i]);
@@ -1252,6 +1239,7 @@ static bool stratum_notify(struct stratum_ctx *sctx, json_t *params)
 	sctx->job.merkle = merkle;
 	sctx->job.merkle_count = merkle_count;
 
+	hex2bin(sctx->job.version, version, 4);
 	hex2bin(sctx->job.nbits, nbits, 4);
 	hex2bin(sctx->job.ntime, ntime, 4);
 	sctx->job.clean = clean;
@@ -1323,7 +1311,7 @@ static bool stratum_get_version(struct stratum_ctx *sctx, json_t *id)
 	char *s;
 	json_t *val;
 	bool ret;
-	
+
 	if (!id || json_is_null(id))
 		return false;
 
@@ -1348,7 +1336,7 @@ static bool stratum_show_message(struct stratum_ctx *sctx, json_t *id, json_t *p
 	val = json_array_get(params, 0);
 	if (val)
 		applog(LOG_NOTICE, "MESSAGE FROM SERVER: %s", json_string_value(val));
-	
+
 	if (!id || json_is_null(id))
 		return true;
 

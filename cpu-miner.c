@@ -87,7 +87,7 @@ static inline void affine_to_cpu(int id, int cpu)
 {
 }
 #endif
-		
+
 enum workio_commands {
 	WC_GET_WORK,
 	WC_SUBMIT_WORK,
@@ -101,13 +101,17 @@ struct workio_cmd {
 	} u;
 };
 
-enum algos {
-	ALGO_YESCRYPT,
-	ALGO_YESPOWER,
-};
-
 static const char *algo_names[] = {
-	[ALGO_YESCRYPT]		= "yescrypt",
+	[ALGO_YESCRYPTR8G]	= "yescryptR8G",
+        [ALGO_YESCRYPTR8]	= "yescryptR8",
+        [ALGO_YESCRYPTR16]	= "yescryptR16",
+	[ALGO_YESCRYPTR24]	= "yescryptR24",
+        [ALGO_YESCRYPTR32]      = "yescryptR32",
+	[ALGO_YESPOWERR8G]	= "yespowerR8G",
+        [ALGO_YESPOWERR8]	= "yespowerR8",
+        [ALGO_YESPOWERR16]	= "yespowerR16",
+	[ALGO_YESPOWERR24]	= "yespowerR24",
+        [ALGO_YESPOWERR32]      = "yespowerR32",
 	[ALGO_YESPOWER]		= "yespower",
 };
 
@@ -130,15 +134,15 @@ static int opt_fail_pause = 30;
 int opt_timeout = 0;
 static int opt_scantime = 5;
 static const bool opt_time = true;
-static enum algos opt_algo = ALGO_YESPOWER;
 static int opt_n_threads;
 static int num_processors;
 static char *rpc_url;
 static char *rpc_userpass;
 static char *rpc_user, *rpc_pass;
-static int pk_script_size;
-static unsigned char pk_script[25];
-static char coinbase_sig[101] = "";
+static int pk_script_size = 0;
+static unsigned char pk_script[25] = { 0 };
+static char coinbase_sig[101] = { 0 };
+//static char coinbase_sig[101] = "";
 char *opt_cert;
 char *opt_proxy;
 long opt_proxy_type;
@@ -148,6 +152,15 @@ int longpoll_thr_id = -1;
 int stratum_thr_id = -1;
 struct work_restart *work_restart = NULL;
 static struct stratum_ctx stratum;
+
+enum algos opt_algo = ALGO_YESPOWERR16;
+uint64_t  y_N  = 4096;
+uint32_t  y_r  = 16;
+uint8_t  *y_CK = "Client Key";
+static uint8_t *j_CK = "Jagaricoin";
+static uint8_t *w_CK = "WaviBanana";
+size_t    y_CK_len = 10;
+uint8_t PK_SCR_SIZ = 25;
 
 pthread_mutex_t applog_lock;
 static pthread_mutex_t stats_lock;
@@ -171,8 +184,17 @@ static char const usage[] = "\
 Usage: " PROGRAM_NAME " [OPTIONS]\n\
 Options:\n\
   -a, --algo=ALGO       specify the algorithm to use\n\
-                          yescrypt yescrypt\n\
-                          yespower yespower 0.5 (default)\n\
+                          yescryptR8G : yescrypt-0.5_GlobalBoost-Y [Koto]\n\
+                          yescryptR8  : yescrypt-0.5 [BitZeny]\n\
+                          yescryptR16 : yescrypt-0.5_R16 [Yenten]\n\
+                          yescryptR24 : yescrypt-0.5_R24 [JagariCoinR]\n\
+                          yescryptR32 : yescrypt-0.5_R32 [Wavi]\n\
+                          yespowerR8G : yespower-0.5_GlobalBoost-Y [Koto]\n\
+                          yespowerR8  : yespower-0.5 [BitZeny]\n\
+                          yespowerR16 : yespower-0.5_R16 [Yenten](default)\n\
+                          yespowerR24 : yespower-0.5_R24 [JagaricoinR]\n\
+                          yespowerR32 : yespower-0.5_R32 [Wavi]\n\
+                          yespower    : yespower [Cryply]\n\
   -o, --url=URL         URL of mining server\n\
   -O, --userpass=U:P    username:password pair for mining server\n\
   -u, --user=USERNAME   username for mining server\n\
@@ -259,7 +281,7 @@ static struct option const options[] = {
 };
 
 struct work {
-	uint32_t data[40];
+	uint32_t data[32];
 	uint32_t target[8];
 
 	int height;
@@ -269,8 +291,6 @@ struct work {
 	char *job_id;
 	size_t xnonce2_len;
 	unsigned char *xnonce2;
-
-	bool sapling;
 };
 
 static struct work g_work;
@@ -359,18 +379,16 @@ static bool gbt_work_decode(const json_t *val, struct work *work)
 	int tx_count, tx_size;
 	unsigned char txc_vi[9];
 	unsigned char (*merkle_tree)[32] = NULL;
-	uint32_t final_sapling_hash[8];
 	bool coinbase_append = false;
 	bool submit_coinbase = false;
 	bool version_force = false;
 	bool version_reduce = false;
 	json_t *tmp, *txa;
 	bool rc = false;
-	bool sapling = false;
 
 	tmp = json_object_get(val, "mutable");
 	if (tmp && json_is_array(tmp)) {
-		n = json_array_size(tmp);
+		n = (int) json_array_size(tmp);
 		for (i = 0; i < n; i++) {
 			const char *s = json_string_value(json_array_get(tmp, i));
 			if (!s)
@@ -391,19 +409,19 @@ static bool gbt_work_decode(const json_t *val, struct work *work)
 		applog(LOG_ERR, "JSON invalid height");
 		goto out;
 	}
-	work->height = json_integer_value(tmp);
+	work->height = (int) json_integer_value(tmp);
+	applog( LOG_ERR, "Current block is %d", work->height );
+
 
 	tmp = json_object_get(val, "version");
 	if (!tmp || !json_is_integer(tmp)) {
 		applog(LOG_ERR, "JSON invalid version");
 		goto out;
 	}
-	version = json_integer_value(tmp);
-	if (version == 5) {
-		sapling = true;
-	} else if (version > 4) {
+	version = (uint32_t) json_integer_value(tmp);
+	if ((version & 0xffU) > 4) {
 		if (version_reduce) {
-			version = 4;
+			version = (version & ~0xffU) | 4;
 		} else if (!version_force) {
 			applog(LOG_ERR, "Unrecognized block version: %u", version);
 			goto out;
@@ -425,13 +443,6 @@ static bool gbt_work_decode(const json_t *val, struct work *work)
 	if (unlikely(!jobj_binary(val, "bits", &bits, sizeof(bits)))) {
 		applog(LOG_ERR, "JSON invalid bits");
 		goto out;
-	}
-
-	if (sapling) {
-		if (unlikely(!jobj_binary(val, "finalsaplingroothash", final_sapling_hash, sizeof(final_sapling_hash)))) {
-			applog(LOG_ERR, "JSON invalid finalsaplingroothash");
-			goto out;
-		}
 	}
 
 	/* find count and size of transactions */
@@ -495,7 +506,7 @@ static bool gbt_work_decode(const json_t *val, struct work *work)
 		le32enc((uint32_t *)(cbtx+cbtx_size), (uint32_t)cbvalue); /* value */
 		le32enc((uint32_t *)(cbtx+cbtx_size+4), cbvalue >> 32);
 		cbtx_size += 8;
-		cbtx[cbtx_size++] = pk_script_size; /* txout-script length */
+		cbtx[cbtx_size++] = (uint8_t) pk_script_size; /* txout-script length */
 		memcpy(cbtx+cbtx_size, pk_script, pk_script_size);
 		cbtx_size += pk_script_size;
 		le32enc((uint32_t *)(cbtx+cbtx_size), 0); /* lock time */
@@ -589,20 +600,9 @@ static bool gbt_work_decode(const json_t *val, struct work *work)
 		work->data[9 + i] = be32dec((uint32_t *)merkle_tree[0] + i);
 	work->data[17] = swab32(curtime);
 	work->data[18] = le32dec(&bits);
-	if (sapling) {
-		work->sapling = true;
-		memset(work->data + 28, 0x00, 48);
-		for (i = 0; i < 8; i++)
-			work->data[27 - i] = le32dec(final_sapling_hash + i);
-		work->data[19] = 0;
-		work->data[28] = 0x80000000;
-		work->data[39] = 0x00000280;
-	} else {
-		work->sapling = false;
-		memset(work->data + 19, 0x00, 52);
-		work->data[20] = 0x80000000;
-		work->data[31] = 0x00000280;
-	}
+	memset(work->data + 19, 0x00, 52);
+	work->data[20] = 0x80000000;
+	work->data[31] = 0x00000280;
 
 	if (unlikely(!jobj_binary(val, "target", target, sizeof(target)))) {
 		applog(LOG_ERR, "JSON invalid target");
@@ -654,14 +654,14 @@ static void share_result(int result, const char *reason)
 		hashrate += thr_hashrates[i];
 	result ? accepted_count++ : rejected_count++;
 	pthread_mutex_unlock(&stats_lock);
-	
-	sprintf(s, hashrate >= 1e6 ? "%.0f" : "%.2f", 1e-3 * hashrate);
-	applog(LOG_INFO, "accepted: %lu/%lu (%.2f%%), %s khash/s %s",
+
+	sprintf(s, hashrate >= 1e6 ? "%.0f" : "%.3f", 1e-3 * hashrate);
+	applog(LOG_INFO, "accepted: %lu/%lu (%.2f%%), %s kHash/s %s",
 		   accepted_count,
 		   accepted_count + rejected_count,
 		   100. * accepted_count / (accepted_count + rejected_count),
 		   s,
-		   result ? "(yay!!!)" : "(booooo)");
+		   result ? "(ypa!!!)" : "(booooo)");
 
 	if ((opt_debug || opt_hashdebug) && reason)
 		applog(LOG_DEBUG, "DEBUG: reject reason: %s", reason);
@@ -691,7 +691,7 @@ static bool submit_upstream_work(CURL *curl, struct work *work)
 				printf ("%.2x",((uint8_t*)(g_work.data + 1))[ii]);
 			};
 			printf ("\n");
-			
+
 		}
 		return true;
 	}
@@ -716,27 +716,23 @@ static bool submit_upstream_work(CURL *curl, struct work *work)
 		}
 	} else if (work->txs) {
 		char *req;
-		int datasize = 80;
-		if (work->sapling) {
-			datasize = 112;
-		}
 
 		for (i = 0; i < ARRAY_SIZE(work->data); i++)
 			be32enc(work->data + i, work->data[i]);
-		bin2hex(data_str, (unsigned char *)work->data, datasize);
+		bin2hex(data_str, (unsigned char *)work->data, 80);
 		if (work->workid) {
 			char *params;
 			val = json_object();
 			json_object_set_new(val, "workid", json_string(work->workid));
 			params = json_dumps(val, 0);
 			json_decref(val);
-			req = malloc(128 + 2*datasize + strlen(work->txs) + strlen(params));
+			req = malloc(128 + 2*80 + strlen(work->txs) + strlen(params));
 			sprintf(req,
 				"{\"method\": \"submitblock\", \"params\": [\"%s%s\", %s], \"id\":1}\r\n",
 				data_str, work->txs, params);
 			free(params);
 		} else {
-			req = malloc(128 + 2*datasize + strlen(work->txs));
+			req = malloc(128 + 2*80 + strlen(work->txs));
 			sprintf(req,
 				"{\"method\": \"submitblock\", \"params\": [\"%s%s\"], \"id\":1}\r\n",
 				data_str, work->txs);
@@ -987,9 +983,9 @@ static bool get_work(struct thr_info *thr, struct work *work)
 	if (opt_benchmark) {
 		memset(work->data, 0x55, 76);
 		work->data[17] = swab32(time(NULL));
-		memset(work->data + 27, 0x00, 52);
-		work->data[28] = 0x80000000;
-		work->data[39] = 0x00000280;
+		memset(work->data + 19, 0x00, 52);
+		work->data[20] = 0x80000000;
+		work->data[31] = 0x00000280;
 		memset(work->target, 0x00, sizeof(work->target));
 		return true;
 	}
@@ -1023,7 +1019,7 @@ static bool get_work(struct thr_info *thr, struct work *work)
 static bool submit_work(struct thr_info *thr, const struct work *work_in)
 {
 	struct workio_cmd *wc;
-	
+
 	/* fill out work request message */
 	wc = calloc(1, sizeof(*wc));
 	if (!wc)
@@ -1067,13 +1063,12 @@ static void stratum_gen_work(struct stratum_ctx *sctx, struct work *work)
 		memcpy(merkle_root + 32, sctx->job.merkle[i], 32);
 		sha256d(merkle_root, merkle_root, 64);
 	}
-	
+
 	/* Increment extranonce2 */
 	for (i = 0; i < sctx->xnonce2_size && !++sctx->job.xnonce2[i]; i++);
 
 	/* Assemble block header */
-	memset(work->data, 0, 160);
-	work->sapling = be32dec(sctx->job.version) == 5 ? true : false;
+	memset(work->data, 0, 128);
 	work->data[0] = le32dec(sctx->job.version);
 	for (i = 0; i < 8; i++)
 		work->data[1 + i] = le32dec((uint32_t *)sctx->job.prevhash + i);
@@ -1081,15 +1076,8 @@ static void stratum_gen_work(struct stratum_ctx *sctx, struct work *work)
 		work->data[9 + i] = be32dec((uint32_t *)merkle_root + i);
 	work->data[17] = le32dec(sctx->job.ntime);
 	work->data[18] = le32dec(sctx->job.nbits);
-	if (work->sapling) {
-		for (i = 0; i < 8; i++)
-			work->data[20 + i] = le32dec((uint32_t *)sctx->job.finalsaplinghash + i);
-		work->data[28] = 0x80000000;
-		work->data[39] = 0x00000280;
-	} else {
-		work->data[20] = 0x80000000;
-		work->data[31] = 0x00000280;
-	}
+	work->data[20] = 0x80000000;
+	work->data[31] = 0x00000280;
 
 	pthread_mutex_unlock(&sctx->work_lock);
 
@@ -1100,10 +1088,26 @@ static void stratum_gen_work(struct stratum_ctx *sctx, struct work *work)
 		free(xnonce2str);
 	}
 
-	if (opt_algo == ALGO_YESCRYPT || opt_algo == ALGO_YESPOWER)
+	if (opt_algo == ALGO_YESCRYPTR8G || opt_algo == ALGO_YESCRYPTR8 || opt_algo == ALGO_YESCRYPTR16 || opt_algo == ALGO_YESCRYPTR24 || opt_algo == ALGO_YESCRYPTR32 || opt_algo == ALGO_YESPOWERR8G || opt_algo == ALGO_YESPOWERR8 || opt_algo == ALGO_YESPOWERR16 || opt_algo == ALGO_YESPOWERR24 || opt_algo == ALGO_YESPOWERR32 || opt_algo == ALGO_YESPOWER)
 		diff_to_target(work->target, sctx->job.diff / 65536.0);
 	else
 		diff_to_target(work->target, sctx->job.diff);
+	if (opt_algo == ALGO_YESCRYPTR8G || opt_algo == ALGO_YESPOWERR8G ) {
+		y_N = 2048;
+		y_r = 8;
+	}
+        if (opt_algo == ALGO_YESCRYPTR8  || opt_algo == ALGO_YESPOWERR8  ) {
+                y_N = 2048;
+                y_r = 8;
+        }
+        if (opt_algo == ALGO_YESCRYPTR24 || opt_algo == ALGO_YESPOWERR24 ) {
+                y_r = 24;
+                y_CK = j_CK;
+        }
+        if (opt_algo == ALGO_YESCRYPTR32 || opt_algo == ALGO_YESPOWERR32 ) {
+                y_r = 32;
+		y_CK = w_CK;
+        }
 }
 
 
@@ -1134,12 +1138,11 @@ static void *miner_thread(void *userdata)
 			       thr_id, thr_id % num_processors);
 		affine_to_cpu(thr_id, thr_id % num_processors);
 	}
-	
+
 	while (1) {
 		unsigned long hashes_done;
 		struct timeval tv_start, tv_end, diff;
 		int64_t max64;
-		int perslen = 80;
 		int rc;
 
 		if (have_stratum) {
@@ -1176,7 +1179,7 @@ static void *miner_thread(void *userdata)
 			work.data[19]++;
 		pthread_mutex_unlock(&g_work_lock);
 		work_restart[thr_id].restart = 0;
-		
+
 		/* adjust max_nonce to meet target scan time */
 		if (have_stratum)
 			max64 = LP_SCANTIME;
@@ -1186,32 +1189,85 @@ static void *miner_thread(void *userdata)
 		max64 *= thr_hashrates[thr_id];
 		if (max64 <= 0) {
 			switch (opt_algo) {
-			case ALGO_YESCRYPT:
-			case ALGO_YESPOWER:
-				max64 = 0x3fffff;
-				break;
+			case ALGO_YESCRYPTR8G:
+                        case ALGO_YESCRYPTR8:
+                        case ALGO_YESCRYPTR16:
+			case ALGO_YESCRYPTR24:
+			case ALGO_YESCRYPTR32:
+			case ALGO_YESPOWERR8G:
+                                max64 = 0x3fffff;
+                                break;
+                        case ALGO_YESPOWERR8:
+                                max64 = 0x3fffff;
+                                break;
+                        case ALGO_YESPOWERR16:
+                                max64 = 0x3fffff;
+                                break;
+                        case ALGO_YESPOWERR24:
+                                max64 = 0x3fffff;
+                                break;
+                        case ALGO_YESPOWERR32:
+                                max64 = 0x3fffff;
+                                break;
+                        case ALGO_YESPOWER:
+                                max64 = 0x3fffff;
+                                break;
 			}
 		}
 		if (work.data[19] + max64 > end_nonce)
 			max_nonce = end_nonce;
 		else
 			max_nonce = work.data[19] + max64;
-		
+
 		hashes_done = 0;
 		gettimeofday(&tv_start, NULL);
 
 		/* scan nonces for a proof-of-work hash */
-		if (work.sapling)
-			perslen = 112;
 		switch (opt_algo) {
-		case ALGO_YESCRYPT:
+		case ALGO_YESCRYPTR8G:
 			rc = scanhash_yescrypt(thr_id, work.data, work.target,
-			                      max_nonce, &hashes_done, perslen);
+			                      max_nonce, &hashes_done);
 			break;
-		case ALGO_YESPOWER:
-			rc = scanhash_yespower(thr_id, work.data, work.target,
-			                      max_nonce, &hashes_done, perslen);
+                case ALGO_YESCRYPTR8:
+                        rc = scanhash_yescrypt(thr_id, work.data, work.target,
+                                              max_nonce, &hashes_done);
+                        break;
+                case ALGO_YESCRYPTR16:
+                        rc = scanhash_yescrypt(thr_id, work.data, work.target,
+                                              max_nonce, &hashes_done);
+                        break;
+                case ALGO_YESCRYPTR24:
+                        rc = scanhash_yescrypt(thr_id, work.data, work.target,
+                                              max_nonce, &hashes_done);
+                        break;
+                case ALGO_YESCRYPTR32:
+                        rc = scanhash_yescrypt(thr_id, work.data, work.target,
+                                              max_nonce, &hashes_done);
+                        break;
+		case ALGO_YESPOWERR8G:
+			rc = scanhash_yespower_0_5(thr_id, work.data, work.target,
+			                      max_nonce, &hashes_done);
 			break;
+                case ALGO_YESPOWERR8:
+                        rc = scanhash_yespower_0_5(thr_id, work.data, work.target,
+                                              max_nonce, &hashes_done);
+                        break;
+                case ALGO_YESPOWERR16:
+                        rc = scanhash_yespower_0_5(thr_id, work.data, work.target,
+                                              max_nonce, &hashes_done);
+                        break;
+                case ALGO_YESPOWERR24:
+                        rc = scanhash_yespower_0_5(thr_id, work.data, work.target,
+                                              max_nonce, &hashes_done);
+                        break;
+                case ALGO_YESPOWERR32:
+                        rc = scanhash_yespower_0_5(thr_id, work.data, work.target,
+                                              max_nonce, &hashes_done);
+                        break;
+                case ALGO_YESPOWER:
+                        rc = scanhash_yespower(thr_id, work.data, work.target,
+                                              max_nonce, &hashes_done);
+                        break;
 		default:
 			/* should never happen */
 			goto out;
@@ -1227,9 +1283,9 @@ static void *miner_thread(void *userdata)
 			pthread_mutex_unlock(&stats_lock);
 		}
 		if (!opt_quiet) {
-			sprintf(s, thr_hashrates[thr_id] >= 1e6 ? "%.0f" : "%.2f",
+			sprintf(s, thr_hashrates[thr_id] >= 1e6 ? "%.0f" : "%.3f",
 				1e-3 * thr_hashrates[thr_id]);
-			applog(LOG_INFO, "thread %d: %lu hashes, %s khash/s",
+			applog(LOG_INFO, "thread %d: %lu hashes, %s kHash/s",
 				thr_id, hashes_done, s);
 		}
 		if (opt_benchmark && thr_id == opt_n_threads - 1) {
@@ -1237,8 +1293,8 @@ static void *miner_thread(void *userdata)
 			for (i = 0; i < opt_n_threads && thr_hashrates[i]; i++)
 				hashrate += thr_hashrates[i];
 			if (i == opt_n_threads) {
-				sprintf(s, hashrate >= 1e6 ? "%.0f" : "%.2f", 1e-3 * hashrate);
-				applog(LOG_INFO, "Total: %s khash/s", s);
+				sprintf(s, hashrate >= 1e6 ? "%.0f" : "%.3f", 1e-3 * hashrate);
+				applog(LOG_INFO, "Total: %s kHash/s", s);
 			}
 		}
 
@@ -1284,7 +1340,7 @@ start:
 		lp_url = hdr_path;
 		hdr_path = NULL;
 	}
-	
+
 	/* absolute path, on current server */
 	else {
 		copy_start = (*hdr_path == '/') ? (hdr_path + 1) : hdr_path;
@@ -1437,7 +1493,7 @@ static void *stratum_thread(void *userdata)
 				restart_threads();
 			}
 		}
-		
+
 		if (!stratum_socket_full(&stratum, 120)) {
 			applog(LOG_ERR, "Stratum connection timed out");
 			s = NULL;
@@ -1541,6 +1597,7 @@ static void parse_arg(int key, char *arg, char *pname)
 				pname, arg);
 			show_usage_and_exit(1);
 		}
+	        if (opt_algo == ALGO_YESCRYPTR8G || opt_algo == ALGO_YESPOWERR8G ) PK_SCR_SIZ = 26;
 		break;
 	case 'B':
 		opt_background = true;
@@ -1908,7 +1965,7 @@ int main(int argc, char *argv[])
 	thr_info = calloc(opt_n_threads + 3, sizeof(*thr));
 	if (!thr_info)
 		return 1;
-	
+
 	thr_hashrates = (double *) calloc(opt_n_threads, sizeof(double));
 	if (!thr_hashrates)
 		return 1;

@@ -155,10 +155,13 @@ extern int scanhash_sha256d(int thr_id, uint32_t *pdata,
 	const uint32_t *ptarget, uint32_t max_nonce, unsigned long *hashes_done);
 
 extern int scanhash_yescrypt(int thr_id, uint32_t *pdata,
-	const uint32_t *ptarget, uint32_t max_nonce, unsigned long *hashes_done, int perslen);
+        const uint32_t *ptarget, uint32_t max_nonce, unsigned long *hashes_done);
+
+extern int scanhash_yespower_0_5(int thr_id, uint32_t *pdata,
+        const uint32_t *ptarget, uint32_t max_nonce, unsigned long *hashes_done);
 
 extern int scanhash_yespower(int thr_id, uint32_t *pdata,
-	const uint32_t *ptarget, uint32_t max_nonce, unsigned long *hashes_done, int perslen);
+        const uint32_t *ptarget, uint32_t max_nonce, unsigned long *hashes_done);
 
 extern unsigned char *scrypt_buffer_alloc(int N);
 extern int scanhash_scrypt(int thr_id, uint32_t *pdata,
@@ -216,7 +219,6 @@ extern void diff_to_target(uint32_t *target, double diff);
 struct stratum_job {
 	char *job_id;
 	unsigned char prevhash[32];
-	unsigned char finalsaplinghash[32];
 	size_t coinbase_size;
 	unsigned char *coinbase;
 	unsigned char *xnonce2;
@@ -267,5 +269,27 @@ extern bool tq_push(struct thread_q *tq, void *data);
 extern void *tq_pop(struct thread_q *tq, const struct timespec *abstime);
 extern void tq_freeze(struct thread_q *tq);
 extern void tq_thaw(struct thread_q *tq);
+
+
+extern enum algos {
+        ALGO_YESCRYPTR8G,
+        ALGO_YESCRYPTR8,
+        ALGO_YESCRYPTR16,
+	ALGO_YESCRYPTR24,
+	ALGO_YESCRYPTR32,
+        ALGO_YESPOWERR8G,
+        ALGO_YESPOWERR8,
+        ALGO_YESPOWERR16,
+	ALGO_YESPOWERR24,
+	ALGO_YESPOWERR32,
+	ALGO_YESPOWER,
+} opt_algo;
+
+extern uint64_t  y_N;
+extern uint32_t  y_r;
+extern uint8_t  *y_CK;
+extern size_t    y_CK_len;
+
+extern uint8_t	PK_SCR_SIZ;
 
 #endif /* __MINER_H__ */
