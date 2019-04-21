@@ -160,7 +160,7 @@ extern int scanhash_yescrypt(int thr_id, uint32_t *pdata,
 extern int scanhash_yespower_0_5(int thr_id, uint32_t *pdata,
         const uint32_t *ptarget, uint32_t max_nonce, unsigned long *hashes_done);
 
-extern int scanhash_yespower(int thr_id, uint32_t *pdata,
+extern int scanhash_yespower_1_0(int thr_id, uint32_t *pdata,
         const uint32_t *ptarget, uint32_t max_nonce, unsigned long *hashes_done);
 
 extern unsigned char *scrypt_buffer_alloc(int N);
@@ -277,12 +277,13 @@ extern enum algos {
         ALGO_YESCRYPTR16,
 	ALGO_YESCRYPTR24,
 	ALGO_YESCRYPTR32,
-        ALGO_YESPOWERR8G,
-        ALGO_YESPOWERR8,
-        ALGO_YESPOWERR16,
-	ALGO_YESPOWERR24,
-	ALGO_YESPOWERR32,
+        ALGO_YESPOWER05R8G,
+        ALGO_YESPOWER05R8,
+        ALGO_YESPOWER05R16,
+	ALGO_YESPOWER05R24,
+	ALGO_YESPOWER05R32,
 	ALGO_YESPOWER,
+	ALGO_YESPOWERR16,
 } opt_algo;
 
 extern uint64_t  y_N;

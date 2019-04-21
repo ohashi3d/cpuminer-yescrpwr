@@ -107,12 +107,13 @@ static const char *algo_names[] = {
         [ALGO_YESCRYPTR16]	= "yescryptR16",
 	[ALGO_YESCRYPTR24]	= "yescryptR24",
         [ALGO_YESCRYPTR32]      = "yescryptR32",
-	[ALGO_YESPOWERR8G]	= "yespowerR8G",
-        [ALGO_YESPOWERR8]	= "yespowerR8",
-        [ALGO_YESPOWERR16]	= "yespowerR16",
-	[ALGO_YESPOWERR24]	= "yespowerR24",
-        [ALGO_YESPOWERR32]      = "yespowerR32",
+	[ALGO_YESPOWER05R8G]	= "yespower05R8G",
+        [ALGO_YESPOWER05R8]	= "yespower05R8",
+        [ALGO_YESPOWER05R16]	= "yespower05R16",
+	[ALGO_YESPOWER05R24]	= "yespower05R24",
+        [ALGO_YESPOWER05R32]	= "yespower05R32",
 	[ALGO_YESPOWER]		= "yespower",
+	[ALGO_YESPOWERR16]	= "yespowerR16",
 };
 
 bool opt_debug = false;
@@ -184,17 +185,18 @@ static char const usage[] = "\
 Usage: " PROGRAM_NAME " [OPTIONS]\n\
 Options:\n\
   -a, --algo=ALGO       specify the algorithm to use\n\
-                          yescryptR8G : yescrypt-0.5_GlobalBoost-Y [Koto]\n\
+                          yescryptR8G : yescrypt-0.5_GlobalBoost-Y [old Koto (before Sapling)]\n\
                           yescryptR8  : yescrypt-0.5 [BitZeny]\n\
-                          yescryptR16 : yescrypt-0.5_R16 [Yenten]\n\
+                          yescryptR16 : yescrypt-0.5_R16 [Elicoin]\n\
                           yescryptR24 : yescrypt-0.5_R24 [JagariCoinR]\n\
                           yescryptR32 : yescrypt-0.5_R32 [Wavi]\n\
-                          yespowerR8G : yespower-0.5_GlobalBoost-Y [Koto]\n\
-                          yespowerR8  : yespower-0.5 [BitZeny]\n\
-                          yespowerR16 : yespower-0.5_R16 [Yenten](default)\n\
-                          yespowerR24 : yespower-0.5_R24 [JagaricoinR]\n\
-                          yespowerR32 : yespower-0.5_R32 [Wavi]\n\
-                          yespower    : yespower [Cryply]\n\
+                          yespower05R8G : yespower-0.5_GlobalBoost-Y [old Koto (before Sapline)]\n\
+                          yespower05R8  : yespower-0.5 [BitZeny]\n\
+                          yespower05R16 : yespower-0.5_R16 [Elicoin]\n\
+                          yespower05R24 : yespower-0.5_R24 [JagaricoinR]\n\
+                          yespower05R32 : yespower-0.5_R32 [Wavi]\n\
+                          yespower    : yespower [CranePay]\n\
+                          yespowerR16 : yespowerR16 [Yenten](default)\n\
   -o, --url=URL         URL of mining server\n\
   -O, --userpass=U:P    username:password pair for mining server\n\
   -u, --user=USERNAME   username for mining server\n\
@@ -1088,25 +1090,33 @@ static void stratum_gen_work(struct stratum_ctx *sctx, struct work *work)
 		free(xnonce2str);
 	}
 
-	if (opt_algo == ALGO_YESCRYPTR8G || opt_algo == ALGO_YESCRYPTR8 || opt_algo == ALGO_YESCRYPTR16 || opt_algo == ALGO_YESCRYPTR24 || opt_algo == ALGO_YESCRYPTR32 || opt_algo == ALGO_YESPOWERR8G || opt_algo == ALGO_YESPOWERR8 || opt_algo == ALGO_YESPOWERR16 || opt_algo == ALGO_YESPOWERR24 || opt_algo == ALGO_YESPOWERR32 || opt_algo == ALGO_YESPOWER)
+	if (opt_algo == ALGO_YESCRYPTR8G || opt_algo == ALGO_YESCRYPTR8 || opt_algo == ALGO_YESCRYPTR16 || opt_algo == ALGO_YESCRYPTR24 || opt_algo == ALGO_YESCRYPTR32 || opt_algo == ALGO_YESPOWER05R8G || opt_algo == ALGO_YESPOWER05R8 || opt_algo == ALGO_YESPOWER05R16 || opt_algo == ALGO_YESPOWER05R24 || opt_algo == ALGO_YESPOWER05R32 || opt_algo == ALGO_YESPOWER || opt_algo == ALGO_YESPOWERR16)
 		diff_to_target(work->target, sctx->job.diff / 65536.0);
 	else
 		diff_to_target(work->target, sctx->job.diff);
-	if (opt_algo == ALGO_YESCRYPTR8G || opt_algo == ALGO_YESPOWERR8G ) {
+	if (opt_algo == ALGO_YESCRYPTR8G || opt_algo == ALGO_YESPOWER05R8G ) {
 		y_N = 2048;
 		y_r = 8;
 	}
-        if (opt_algo == ALGO_YESCRYPTR8  || opt_algo == ALGO_YESPOWERR8  ) {
+        if (opt_algo == ALGO_YESCRYPTR8  || opt_algo == ALGO_YESPOWER05R8  ) {
                 y_N = 2048;
                 y_r = 8;
         }
-        if (opt_algo == ALGO_YESCRYPTR24 || opt_algo == ALGO_YESPOWERR24 ) {
+        if (opt_algo == ALGO_YESCRYPTR24 || opt_algo == ALGO_YESPOWER05R24 ) {
                 y_r = 24;
                 y_CK = j_CK;
         }
-        if (opt_algo == ALGO_YESCRYPTR32 || opt_algo == ALGO_YESPOWERR32 ) {
+        if (opt_algo == ALGO_YESCRYPTR32 || opt_algo == ALGO_YESPOWER05R32 ) {
                 y_r = 32;
 		y_CK = w_CK;
+        }
+        if (opt_algo == ALGO_YESPOWER) {
+                y_N = 2048;
+                y_r = 32;
+        }
+        if (opt_algo == ALGO_YESPOWERR16) {
+                y_N = 4096;
+                y_r = 16;
         }
 }
 
@@ -1194,22 +1204,25 @@ static void *miner_thread(void *userdata)
                         case ALGO_YESCRYPTR16:
 			case ALGO_YESCRYPTR24:
 			case ALGO_YESCRYPTR32:
-			case ALGO_YESPOWERR8G:
+			case ALGO_YESPOWER05R8G:
                                 max64 = 0x3fffff;
                                 break;
-                        case ALGO_YESPOWERR8:
+                        case ALGO_YESPOWER05R8:
                                 max64 = 0x3fffff;
                                 break;
-                        case ALGO_YESPOWERR16:
+                        case ALGO_YESPOWER05R16:
                                 max64 = 0x3fffff;
                                 break;
-                        case ALGO_YESPOWERR24:
+                        case ALGO_YESPOWER05R24:
                                 max64 = 0x3fffff;
                                 break;
-                        case ALGO_YESPOWERR32:
+                        case ALGO_YESPOWER05R32:
                                 max64 = 0x3fffff;
                                 break;
                         case ALGO_YESPOWER:
+                                max64 = 0x3fffff;
+                                break;
+                        case ALGO_YESPOWERR16:
                                 max64 = 0x3fffff;
                                 break;
 			}
@@ -1244,28 +1257,32 @@ static void *miner_thread(void *userdata)
                         rc = scanhash_yescrypt(thr_id, work.data, work.target,
                                               max_nonce, &hashes_done);
                         break;
-		case ALGO_YESPOWERR8G:
+		case ALGO_YESPOWER05R8G:
 			rc = scanhash_yespower_0_5(thr_id, work.data, work.target,
 			                      max_nonce, &hashes_done);
 			break;
-                case ALGO_YESPOWERR8:
+                case ALGO_YESPOWER05R8:
                         rc = scanhash_yespower_0_5(thr_id, work.data, work.target,
                                               max_nonce, &hashes_done);
                         break;
-                case ALGO_YESPOWERR16:
+                case ALGO_YESPOWER05R16:
                         rc = scanhash_yespower_0_5(thr_id, work.data, work.target,
                                               max_nonce, &hashes_done);
                         break;
-                case ALGO_YESPOWERR24:
+                case ALGO_YESPOWER05R24:
                         rc = scanhash_yespower_0_5(thr_id, work.data, work.target,
                                               max_nonce, &hashes_done);
                         break;
-                case ALGO_YESPOWERR32:
+                case ALGO_YESPOWER05R32:
                         rc = scanhash_yespower_0_5(thr_id, work.data, work.target,
                                               max_nonce, &hashes_done);
                         break;
                 case ALGO_YESPOWER:
-                        rc = scanhash_yespower(thr_id, work.data, work.target,
+                        rc = scanhash_yespower_1_0(thr_id, work.data, work.target,
+                                              max_nonce, &hashes_done);
+                        break;
+                case ALGO_YESPOWERR16:
+                        rc = scanhash_yespower_1_0(thr_id, work.data, work.target,
                                               max_nonce, &hashes_done);
                         break;
 		default:
@@ -1597,7 +1614,7 @@ static void parse_arg(int key, char *arg, char *pname)
 				pname, arg);
 			show_usage_and_exit(1);
 		}
-	        if (opt_algo == ALGO_YESCRYPTR8G || opt_algo == ALGO_YESPOWERR8G ) PK_SCR_SIZ = 26;
+	        if (opt_algo == ALGO_YESCRYPTR8G || opt_algo == ALGO_YESPOWER05R8G ) PK_SCR_SIZ = 26;
 		break;
 	case 'B':
 		opt_background = true;

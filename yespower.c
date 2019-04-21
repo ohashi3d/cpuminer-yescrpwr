@@ -42,7 +42,7 @@ int scanhash_yespower_0_5(int thr_id, uint32_t *pdata, const uint32_t *ptarget,
                 .pers = y_CK,
                 .perslen = y_CK_len
 	};
-	if (opt_algo == ALGO_YESCRYPTR8G || opt_algo == ALGO_YESPOWERR8G) {
+	if (opt_algo == ALGO_YESPOWER05R8G) {
 		params.pers = (const uint8_t *)endiandata;
 		params.perslen = 80;
 	}
@@ -71,7 +71,7 @@ int scanhash_yespower_0_5(int thr_id, uint32_t *pdata, const uint32_t *ptarget,
         return 0;
 }
 
-int scanhash_yespower(int thr_id, uint32_t *pdata, const uint32_t *ptarget,
+int scanhash_yespower_1_0(int thr_id, uint32_t *pdata, const uint32_t *ptarget,
         uint32_t max_nonce, unsigned long *hashes_done)
 {
         uint32_t n = pdata[19] - 1;
@@ -81,17 +81,11 @@ int scanhash_yespower(int thr_id, uint32_t *pdata, const uint32_t *ptarget,
         uint32_t endiandata[32];
         yespower_params_t params = {
                 .version = YESPOWER_1_0,
-                .N = 2048,
-                .r = 32,
+                .N = y_N,
+                .r = y_r,
                 .pers = NULL,
                 .perslen = 0
         };
-/*
-        if (opt_algo == ALGO_YESCRYPTR8G || opt_algo == ALGO_YESPOWERR8G) {
-                params.pers = (const uint8_t *)endiandata;
-                params.perslen = 80;
-        }
-*/
         //we need bigendian data...
         int kk=0;
         for (; kk < 32; kk++)
