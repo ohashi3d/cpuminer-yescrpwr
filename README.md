@@ -1,6 +1,6 @@
 This is a multi-threaded CPU miner for coins using the [Yescrypt](http://www.openwall.com/presentations/BSidesLjubljana2017-Yescrypt-Large-scale-Password-Hashing/BSidesLjubljana2017-Yescrypt-Large-scale-Password-Hashing.pdf) and [Yespower](https://www.openwall.com/yespower/) Algorithm.
 
-(fork of Jeff Garzik's reference cpuminer https://github.com/KotoDevelopers/cpuminer-yescrypt/)
+(fork of CPU miner for Koto https://github.com/KotoDevelopers/cpuminer-yescrypt/)
 
 License: GPLv2.  See COPYING for details.
 
